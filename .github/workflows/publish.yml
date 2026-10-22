@@ -1,0 +1,50 @@
+# 打版本标签（v1.0.0）或手动触发 → 发布到 GitHub Packages
+# 标签必须与 pom.xml 中的 version 一致，避免发布出无法复现的版本。
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish to GitHub Packages
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Verify tag matches pom version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          POM_VERSION=$(mvn -B -ntp help:evaluate -Dexpression=project.version -q -DforceStdout)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "pom=$POM_VERSION tag=$TAG_VERSION"
+          if [ "$POM_VERSION" != "$TAG_VERSION" ]; then
+            echo "标签与 pom.xml 版本不一致" >&2
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mvn -B -ntp -DskipTests deploy

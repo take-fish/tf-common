@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FishMatrix 统一 JSON 日志。
+  各服务只需在自己的 logback-spring.xml 中 include 本文件。
+
+  固定字段：@timestamp / message / logger / thread / level / service / env / version
+  链路字段：trace_id / span_id / request_id（由 TraceContextFilter 或 Traces 写入）
+-->
+<included>
+  <springProperty scope="context" name="fmService" source="spring.application.name" defaultValue="unknown"/>
+  <springProperty scope="context" name="fmEnv" source="app.environment" defaultValue="unknown"/>
+  <springProperty scope="context" name="fmVersion" source="app.version" defaultValue="dev"/>
+
+  <appender name="FISH_JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+      <timeZone>Asia/Shanghai</timeZone>
+      <customFields>{"service":"${fmService}","env":"${fmEnv}","version":"${fmVersion}"}</customFields>
+      <includeMdc>true</includeMdc>
+      <includeMdcKeyName>trace_id</includeMdcKeyName>
+      <includeMdcKeyName>span_id</includeMdcKeyName>
+      <includeMdcKeyName>request_id</includeMdcKeyName>
+      <fieldNames>
+        <timestamp>@timestamp</timestamp>
+        <message>message</message>
+        <logger>logger</logger>
+        <thread>thread</thread>
+        <level>level</level>
+        <stackTrace>stack_trace</stackTrace>
+      </fieldNames>
+    </encoder>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="FISH_JSON"/>
+  </root>
+</included>

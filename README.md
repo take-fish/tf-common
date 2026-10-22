@@ -17,7 +17,7 @@ FishMatrix 统一异常处理、链路追踪与结构化日志基础库（Spring
 <dependency>
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.0.1</version>
+  <version>1.0.2</version>
 </dependency>
 ```
 
@@ -102,11 +102,11 @@ app:
 
 ## 发布
 
-版本号在 `pom.xml` 中维护。合入 master 后打版本标签（例如 `v1.0.1`）触发 `publish` 工作流，构建并发布到 GitHub Packages。
+版本号在 `pom.xml` 中维护。合入 master 后打版本标签（例如 `v1.0.2`）触发 `publish` 工作流，构建并发布到 GitHub Packages。
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 本地临时验证：

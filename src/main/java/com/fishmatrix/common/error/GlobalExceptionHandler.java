@@ -3,7 +3,6 @@ package com.fishmatrix.common.error;
 import static net.logstash.logback.argument.StructuredArguments.kv;
 
 import com.fishmatrix.common.autoconfigure.FishCommonProperties;
-import com.fishmatrix.common.trace.TraceHeaders;
 import com.fishmatrix.common.trace.TraceIds;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
@@ -237,13 +236,10 @@ public class GlobalExceptionHandler {
         String requestId = TraceIds.currentRequestId();
         ApiErrorResponse body = new ApiErrorResponse(
                 code, message, traceId, requestId, safePath(request), Instant.now(), details);
-        ResponseEntity.BodyBuilder builder = ResponseEntity.status(status)
+        // 响应头由 TraceContextFilter 统一写入；这里再写会与过滤器重复（HTTP 头会出现多份）。
+        return ResponseEntity.status(status)
                 .cacheControl(CacheControl.noStore())
-                .header(TraceHeaders.TRACE_ID, traceId);
-        if (requestId != null) {
-            builder.header(TraceHeaders.REQUEST_ID, requestId);
-        }
-        return builder.body(body);
+                .body(body);
     }
 
     private Map<String, Object> validationDetails(BindException exception) {

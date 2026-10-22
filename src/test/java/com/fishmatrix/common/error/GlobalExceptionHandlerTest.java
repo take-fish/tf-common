@@ -37,9 +37,10 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().error()).isEqualTo("USERNAME_TAKEN");
         assertThat(response.getBody().message()).isEqualTo("这个名号已经有人用了");
         assertThat(response.getBody().traceId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
+        assertThat(response.getBody().requestId()).isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
         assertThat(response.getBody().path()).isEqualTo("/api/v1/test");
-        assertThat(response.getHeaders().getFirst("X-Trace-ID"))
-                .isEqualTo("4bf92f3577b34da6a3ce929d0e0e4736");
+        // 响应头只由 TraceContextFilter 写入，避免重复；处理器不重复设置。
+        assertThat(response.getHeaders().containsKey("X-Trace-ID")).isFalse();
     }
 
     @Test

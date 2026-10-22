@@ -15,6 +15,8 @@
     <encoder class="net.logstash.logback.encoder.LogstashEncoder">
       <timeZone>Asia/Shanghai</timeZone>
       <customFields>{"service":"${fmService}","env":"${fmEnv}","version":"${fmVersion}"}</customFields>
+      <!-- 不要在每行日志里重复输出 Logback 上下文属性（fmService 等）。 -->
+      <includeContext>false</includeContext>
       <includeMdc>true</includeMdc>
       <includeMdcKeyName>trace_id</includeMdcKeyName>
       <includeMdcKeyName>span_id</includeMdcKeyName>

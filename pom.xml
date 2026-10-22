@@ -13,7 +13,7 @@
 
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>
   <name>tf-common</name>
   <description>FishMatrix 统一异常、链路追踪与结构化日志基础库</description>
 

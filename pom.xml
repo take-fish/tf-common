@@ -13,9 +13,9 @@
 
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.0.2</version>
+  <version>1.1.0</version>
   <name>tf-common</name>
-  <description>FishMatrix 统一异常、链路追踪与结构化日志基础库</description>
+  <description>FishMatrix 统一异常、链路追踪、身份权限与文件存储基础库</description>
 
   <properties>
     <java.version>17</java.version>

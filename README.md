@@ -1,15 +1,18 @@
 # tf-common
 
-FishMatrix 统一异常处理、链路追踪与结构化日志基础库（Spring Boot 3.5 / Java 17）。
+FishMatrix 统一鉴权、异常处理、链路追踪、结构化日志、文件存储与消息骨架基础库（Spring Boot 3.5 / Java 17）。
 
 各 Java 服务通过该库获得一致的：
 
+- **统一鉴权**：网关签名身份头校验、`CurrentUser` / `UserContext`、`@RequirePermission`、用户中台 introspection 回退；
 - **链路上下文**：从 W3C `traceparent` 提取 traceId，写入 MDC，回写 `X-Trace-ID` / `X-Request-ID`；
 - **统一错误响应**：固定错误码 + `traceId` / `requestId` / `path` / `timestamp`，前端可展示“编号”；
 - **全局异常处理**：参数校验、认证、404、超时、依赖不可用等映射为稳定错误码；
 - **结构化日志**：单行 JSON（Logstash Encoder），固定字段与链路字段；
 - **服务间传播**：`RestClient` 自动携带 `traceparent` 与 `X-Request-ID`；
-- **异步上下文**：`Traces.wrap(...)` 把链路带到线程池任务中。
+- **异步上下文**：`Traces.wrap(...)` 把链路带到线程池任务中；
+- **文件存储**：`FileStorage` 抽象与本地卷实现，落盘带 SHA-256，库表只存 `storageKey`；
+- **消息 / RPC 骨架**：`EventPublisher` 与属性开关默认关闭，不引入中间件依赖。
 
 ## 依赖
 
@@ -17,7 +20,7 @@ FishMatrix 统一异常处理、链路追踪与结构化日志基础库（Spring
 <dependency>
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.0.2</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
@@ -66,10 +69,99 @@ app:
 
 4. 启动类无需额外注解：`FishCommonAutoConfiguration` 通过 `AutoConfiguration.imports` 注册。
 
+## 统一鉴权
+
+业务服务开启鉴权（用户中台自身必须关闭，避免自调用）：
+
+```yaml
+fm:
+  auth:
+    enabled: ${FM_AUTH_ENABLED:true}
+    user-service-url: ${TF_USER_URL:http://127.0.0.1:8101}
+    identity-secret: ${FM_IDENTITY_SECRET:}
+    allow-bearer-fallback: ${FM_AUTH_BEARER_FALLBACK:true}
+    cache-ttl: 30s
+```
+
+`AuthInterceptor` 对 `/api/**` 按以下顺序解析身份：
+
+1. 网关注入的 `X-FM-*` 身份头 → `IdentitySigner` 校验 HMAC 签名、有效期与时钟偏差；
+2. 无身份头且 `allow-bearer-fallback=true` → 用 `Authorization: Bearer` 调用户中台 `GET /api/v1/user/auth/me`，结果按 token 的 SHA-256 缓存（默认 30 秒，内存不保留明文 token）；
+3. 两者都失败 → 401；用户中台不可用 → 503 `AUTH_UNAVAILABLE`，**绝不降级为匿名**。
+
+业务代码只从上下文取身份，禁止信任查询参数、请求体或客户端自造的用户标识：
+
+```java
+CurrentUser user = UserContext.require();
+long id = user.id();
+boolean admin = user.isAdmin();
+```
+
+接口级校验用 `@RequirePermission`（多个权限码满足任意一个即可）：
+
+```java
+@RequirePermission("reader.public.upload")
+@PostMapping("/books")
+public BookDto upload(...) { ... }
+```
+
+资源级归属校验（例如“只能删自己的”）仍由业务服务根据 `owner_id` 判断，通用库不替代 ACL。
+
+## 文件存储
+
+```yaml
+fm:
+  storage:
+    enabled: true
+    base-dir: ${FM_STORAGE_BASE_DIR:/app/data/files}
+    max-file-bytes: 52428800
+```
+
+开启后自动注册 `FileStorage`（默认 `LocalFileStorage`）。`store()` 会流式落盘、限制大小、按白名单推导扩展名、用随机 UUID 生成 `storageKey` 并计算 SHA-256；数据库只保存返回的元数据：
+
+```java
+StoredFile file = fileStorage.store(input, filename, contentType, "reader", 8L * 1024 * 1024);
+// file.storageKey() / file.size() / file.sha256() / file.contentType()
+```
+
+访问权限永远由数据库记录决定，不能依赖存储路径的不可猜测性。后续切换 MinIO/S3 只需替换 `FileStorage` 实现（`@ConditionalOnMissingBean`）。
+
+## 消息与 RPC 骨架
+
+默认全部关闭，不连接 RocketMQ / Dubbo，也不引入对应依赖：
+
+```yaml
+fm:
+  messaging:
+    enabled: false
+    log-events: false
+    name-server: ""
+    topic-prefix: FM_
+  rpc:
+    enabled: false
+    nacos-namespace: fm-prod
+    group: FM
+    timeout-ms: 3000
+```
+
+`EventPublisher` 当前唯一实现是 `NoopEventPublisher`，业务可先按接口发布领域事件：
+
+```java
+eventPublisher.publish(DomainEvent.of("reader.book.uploaded", "tf-reader",
+        TraceIds.currentTraceId(), "book:" + id, Map.of("bookId", id)));
+```
+
+`DomainEvent` 的 `type` 与字段是跨服务契约，正式接入消息队列后不能随意改名。`fm.rpc.enabled` 仅预留开关，当前没有 Dubbo 适配器。
+
 ## 主要组件
 
 | 类 | 作用 |
 |---|---|
+| `AuthInterceptor` / `IdentitySigner` | 签名身份头校验、Bearer 回退、权限校验 |
+| `CurrentUser` / `UserContext` / `RequirePermission` | 当前身份、上下文与接口权限注解 |
+| `AuthClient` / `IdentityHeaders` | 用户中台 introspection（带缓存）、身份头常量 |
+| `FileStorage` / `LocalFileStorage` / `StoredFile` | 文件存储抽象、本地卷实现与落盘元数据 |
+| `EventPublisher` / `DomainEvent` / `NoopEventPublisher` | 领域事件发布口子与默认无副作用实现 |
 | `TraceContextFilter` | MDC 写入、响应头回写、API/WebSocket 访问日志 |
 | `TraceHeaders` / `TraceIds` / `Traces` | 编号生成与校验、读取当前上下文、异步包装 |
 | `RestClientTraceInterceptor` | 出站请求传播 `traceparent` / `X-Request-ID` |

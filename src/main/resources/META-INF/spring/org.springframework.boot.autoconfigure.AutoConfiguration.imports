@@ -1,1 +1,4 @@
 com.fishmatrix.common.autoconfigure.FishCommonAutoConfiguration
+com.fishmatrix.common.autoconfigure.FishAuthAutoConfiguration
+com.fishmatrix.common.autoconfigure.FishStorageAutoConfiguration
+com.fishmatrix.common.autoconfigure.FishMessagingAutoConfiguration

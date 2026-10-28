@@ -13,13 +13,14 @@
 
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.1.0</version>
+  <version>1.2.0</version>
   <name>tf-common</name>
-  <description>FishMatrix 统一异常、链路追踪、身份权限与文件存储基础库</description>
+  <description>FishMatrix 统一异常、链路追踪、身份权限、文件存储与消息发布基础库</description>
 
   <properties>
     <java.version>17</java.version>
     <logstash-logback-encoder.version>8.1</logstash-logback-encoder.version>
+    <rocketmq.version>5.3.3</rocketmq.version>
   </properties>
 
   <dependencies>
@@ -48,6 +49,12 @@
       <groupId>net.logstash.logback</groupId>
       <artifactId>logstash-logback-encoder</artifactId>
       <version>${logstash-logback-encoder.version}</version>
+    </dependency>
+    <!-- 消息发布适配器：默认不连接，仅 fm.messaging.enabled=true 时创建 producer。 -->
+    <dependency>
+      <groupId>org.apache.rocketmq</groupId>
+      <artifactId>rocketmq-client</artifactId>
+      <version>${rocketmq.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

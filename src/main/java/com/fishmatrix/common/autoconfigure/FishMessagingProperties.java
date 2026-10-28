@@ -17,6 +17,14 @@ public class FishMessagingProperties {
 
     private String topicPrefix = "FM_";
 
+    /** 生产者组；为空时按 fm-{spring.application.name} 推导。 */
+    private String producerGroup = "";
+
+    private int sendTimeoutMs = 3000;
+
+    /** 启用后是否在启动完成时发布一条 SYSTEM_PROBE 诊断事件，默认关闭。 */
+    private boolean diagnosticsOnStartup = false;
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -47,5 +55,29 @@ public class FishMessagingProperties {
 
     public void setTopicPrefix(String topicPrefix) {
         this.topicPrefix = topicPrefix;
+    }
+
+    public String getProducerGroup() {
+        return producerGroup;
+    }
+
+    public void setProducerGroup(String producerGroup) {
+        this.producerGroup = producerGroup;
+    }
+
+    public int getSendTimeoutMs() {
+        return sendTimeoutMs;
+    }
+
+    public void setSendTimeoutMs(int sendTimeoutMs) {
+        this.sendTimeoutMs = sendTimeoutMs;
+    }
+
+    public boolean isDiagnosticsOnStartup() {
+        return diagnosticsOnStartup;
+    }
+
+    public void setDiagnosticsOnStartup(boolean diagnosticsOnStartup) {
+        this.diagnosticsOnStartup = diagnosticsOnStartup;
     }
 }

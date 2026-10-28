@@ -1,6 +1,6 @@
 # tf-common
 
-FishMatrix 统一鉴权、异常处理、链路追踪、结构化日志、文件存储与消息骨架基础库（Spring Boot 3.5 / Java 17）。
+FishMatrix 统一鉴权、异常处理、链路追踪、结构化日志、文件存储与消息发布基础库（Spring Boot 3.5 / Java 17）。
 
 各 Java 服务通过该库获得一致的：
 
@@ -12,7 +12,7 @@ FishMatrix 统一鉴权、异常处理、链路追踪、结构化日志、文件
 - **服务间传播**：`RestClient` 自动携带 `traceparent` 与 `X-Request-ID`；
 - **异步上下文**：`Traces.wrap(...)` 把链路带到线程池任务中；
 - **文件存储**：`FileStorage` 抽象与本地卷实现，落盘带 SHA-256，库表只存 `storageKey`；
-- **消息 / RPC 骨架**：`EventPublisher` 与属性开关默认关闭，不引入中间件依赖。
+- **消息发布**：`EventPublisher` + RocketMQ 适配器，默认关闭、零连接；`RPC` 仍为预留开关。
 
 ## 依赖
 
@@ -20,7 +20,7 @@ FishMatrix 统一鉴权、异常处理、链路追踪、结构化日志、文件
 <dependency>
   <groupId>com.fishmatrix</groupId>
   <artifactId>tf-common</artifactId>
-  <version>1.1.0</version>
+  <version>1.2.0</version>
 </dependency>
 ```
 
@@ -126,17 +126,22 @@ StoredFile file = fileStorage.store(input, filename, contentType, "reader", 8L *
 
 访问权限永远由数据库记录决定，不能依赖存储路径的不可猜测性。后续切换 MinIO/S3 只需替换 `FileStorage` 实现（`@ConditionalOnMissingBean`）。
 
-## 消息与 RPC 骨架
+## 消息与 RPC
 
-默认全部关闭，不连接 RocketMQ / Dubbo，也不引入对应依赖：
+### 事件发布（RocketMQ）
+
+1.2.0 起内置 RocketMQ 适配器，默认仍不连接任何中间件：
 
 ```yaml
 fm:
   messaging:
-    enabled: false
-    log-events: false
-    name-server: ""
-    topic-prefix: FM_
+    enabled: false              # true 时创建生产者并校验连通性，失败则应用启动失败
+    log-events: false           # true 时成功发布也记 INFO
+    name-server: rocketmq-nameserver:9876
+    topic-prefix: FM_           # 测试环境使用 FM_TEST_
+    producer-group: fm-game     # 为空时按 fm-{spring.application.name} 推导
+    send-timeout-ms: 3000
+    diagnostics-on-startup: false
   rpc:
     enabled: false
     nacos-namespace: fm-prod
@@ -144,14 +149,21 @@ fm:
     timeout-ms: 3000
 ```
 
-`EventPublisher` 当前唯一实现是 `NoopEventPublisher`，业务可先按接口发布领域事件：
+- `enabled=false`（默认）：使用 `NoopEventPublisher`，不建立任何连接。
+- `enabled=true`：`name-server` 必填；启动时创建 `DefaultMQProducer`，broker 不可达会让应用启动失败，避免开关打开却静默不生效。
+- topic = `topic-prefix + type`，tag = `type`，keys = 事件 `key`（为空则用 eventId），消息体是 `DomainEvent` 的 JSON。
+- 发送为同步调用，失败抛 `EventPublishException` 并记 ERROR，重试/补偿由调用方决定。
+- `diagnostics-on-startup=true` 时在启动完成后发布一条 `SYSTEM_PROBE` 事件，用于连通性验收。
+- `type` 只允许 `[A-Za-z0-9_-]`，约定使用大写 + 下划线（如 `MATCH_FINISHED`）。
+
+业务代码只依赖 `EventPublisher` 接口：
 
 ```java
-eventPublisher.publish(DomainEvent.of("reader.book.uploaded", "tf-reader",
+eventPublisher.publish(DomainEvent.of("READER_BOOK_UPLOADED", "tf-reader",
         TraceIds.currentTraceId(), "book:" + id, Map.of("bookId", id)));
 ```
 
-`DomainEvent` 的 `type` 与字段是跨服务契约，正式接入消息队列后不能随意改名。`fm.rpc.enabled` 仅预留开关，当前没有 Dubbo 适配器。
+`DomainEvent` 的 `type` 与字段是跨服务契约，接入消费者后不能随意改名。`fm.rpc.enabled` 仅预留开关，当前没有 Dubbo 适配器。
 
 ## 主要组件
 
@@ -161,7 +173,9 @@ eventPublisher.publish(DomainEvent.of("reader.book.uploaded", "tf-reader",
 | `CurrentUser` / `UserContext` / `RequirePermission` | 当前身份、上下文与接口权限注解 |
 | `AuthClient` / `IdentityHeaders` | 用户中台 introspection（带缓存）、身份头常量 |
 | `FileStorage` / `LocalFileStorage` / `StoredFile` | 文件存储抽象、本地卷实现与落盘元数据 |
-| `EventPublisher` / `DomainEvent` / `NoopEventPublisher` | 领域事件发布口子与默认无副作用实现 |
+| `EventPublisher` / `DomainEvent` | 领域事件发布口子与跨服务契约 |
+| `NoopEventPublisher` / `RocketMqEventPublisher` | 默认无副作用实现与 RocketMQ 适配器 |
+| `EventPublishException` | 发布失败异常（序列化或 broker 拒绝） |
 | `TraceContextFilter` | MDC 写入、响应头回写、API/WebSocket 访问日志 |
 | `TraceHeaders` / `TraceIds` / `Traces` | 编号生成与校验、读取当前上下文、异步包装 |
 | `RestClientTraceInterceptor` | 出站请求传播 `traceparent` / `X-Request-ID` |

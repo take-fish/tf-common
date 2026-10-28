@@ -1,21 +1,17 @@
 package com.fishmatrix.common.messaging;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 默认发布器：只记录事件摘要，不建立任何网络连接。
  * 生产接入消息队列后由真实适配器覆盖。
  */
+@Slf4j
+@RequiredArgsConstructor
 public class NoopEventPublisher implements EventPublisher {
 
-    private static final Logger log = LoggerFactory.getLogger(NoopEventPublisher.class);
-
     private final boolean logEvents;
-
-    public NoopEventPublisher(boolean logEvents) {
-        this.logEvents = logEvents;
-    }
 
     @Override
     public void publish(DomainEvent event) {

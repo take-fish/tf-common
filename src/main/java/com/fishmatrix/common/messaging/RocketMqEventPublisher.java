@@ -2,11 +2,10 @@ package com.fishmatrix.common.messaging;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.regex.Pattern;
 
@@ -15,9 +14,8 @@ import java.util.regex.Pattern;
  * 生产与测试共享 broker 时依靠前缀（FM_ / FM_TEST_）隔离；
  * tag 为事件类型，keys 为业务聚合 ID，消息体是 DomainEvent 的 JSON。
  */
+@Slf4j
 public class RocketMqEventPublisher implements EventPublisher {
-
-    private static final Logger log = LoggerFactory.getLogger(RocketMqEventPublisher.class);
 
     private static final Pattern TYPE_PATTERN = Pattern.compile("[A-Za-z0-9_-]+");
 

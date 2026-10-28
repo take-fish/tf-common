@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -25,6 +26,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *   <li>为 API 与 WebSocket 握手输出一条结构化访问日志。</li>
  * </ol>
  */
+@RequiredArgsConstructor
 public class TraceContextFilter extends OncePerRequestFilter {
 
     /** 必须晚于 Spring Boot 的 ServerHttpObservationFilter（HIGHEST_PRECEDENCE + 1）。 */
@@ -34,10 +36,6 @@ public class TraceContextFilter extends OncePerRequestFilter {
     private static final int MAX_PATH_LENGTH = 512;
 
     private final FishCommonProperties properties;
-
-    public TraceContextFilter(FishCommonProperties properties) {
-        this.properties = properties;
-    }
 
     @Override
     protected void doFilterInternal(

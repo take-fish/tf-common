@@ -5,6 +5,7 @@ import com.fishmatrix.common.error.ApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.AntPathMatcher;
 import org.springframework.web.method.HandlerMethod;
@@ -19,19 +20,13 @@ import org.springframework.web.servlet.HandlerInterceptor;
  *   <li>写入 {@link UserContext}，请求结束后清理。</li>
  * </ol>
  */
+@RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
     private final IdentitySigner signer;
     private final AuthClient authClient;
     private final FishAuthProperties properties;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
-
-    public AuthInterceptor(IdentitySigner signer, AuthClient authClient,
-            FishAuthProperties properties) {
-        this.signer = signer;
-        this.authClient = authClient;
-        this.properties = properties;
-    }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response,

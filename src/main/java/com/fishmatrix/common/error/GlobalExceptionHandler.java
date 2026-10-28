@@ -11,8 +11,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataAccessException;
@@ -50,16 +50,13 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
+@Slf4j
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final int MAX_FIELD_ERRORS = 20;
 
     private final FishCommonProperties properties;
-
-    public GlobalExceptionHandler(FishCommonProperties properties) {
-        this.properties = properties;
-    }
 
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiErrorResponse> handleApi(ApiException exception, HttpServletRequest request) {

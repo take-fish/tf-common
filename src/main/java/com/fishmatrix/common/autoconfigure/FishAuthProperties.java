@@ -2,7 +2,9 @@ package com.fishmatrix.common.autoconfigure;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "fm.auth")
@@ -45,6 +47,67 @@ public class FishAuthProperties {
             "/error",
             "/api/v1/*/health",
             "/api/v1/*/meta"));
+
+    /** JWT 访问令牌的本地验签配置。密钥由 Nacos 下发，服务不持有私钥。 */
+    private Jwt jwt = new Jwt();
+
+    public static class Jwt {
+
+        /** 是否启用本地 JWT 验签。关闭后只能走身份头或 introspection 回退。 */
+        private boolean enabled = true;
+
+        /** 期望的签发方；为空表示不校验 iss。 */
+        private String issuer = "fishmatrix";
+
+        /** 默认公钥对应的 kid。 */
+        private String keyId = "default";
+
+        /** 默认公钥：32 字节 Ed25519 裸公钥，base64url 或 base64。 */
+        private String publicKey = "";
+
+        /** 轮换用：kid -> 公钥。可同时配置新旧两把，先发新钥再换签发方。 */
+        private Map<String, String> keys = new LinkedHashMap<>();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getIssuer() {
+            return issuer;
+        }
+
+        public void setIssuer(String issuer) {
+            this.issuer = issuer;
+        }
+
+        public String getKeyId() {
+            return keyId;
+        }
+
+        public void setKeyId(String keyId) {
+            this.keyId = keyId;
+        }
+
+        public String getPublicKey() {
+            return publicKey;
+        }
+
+        public void setPublicKey(String publicKey) {
+            this.publicKey = publicKey;
+        }
+
+        public Map<String, String> getKeys() {
+            return keys;
+        }
+
+        public void setKeys(Map<String, String> keys) {
+            this.keys = keys == null ? new LinkedHashMap<>() : keys;
+        }
+    }
 
     public boolean isEnabled() {
         return enabled;
@@ -124,5 +187,13 @@ public class FishAuthProperties {
 
     public void setPublicPaths(List<String> publicPaths) {
         this.publicPaths = publicPaths;
+    }
+
+    public Jwt getJwt() {
+        return jwt;
+    }
+
+    public void setJwt(Jwt jwt) {
+        this.jwt = jwt == null ? new Jwt() : jwt;
     }
 }

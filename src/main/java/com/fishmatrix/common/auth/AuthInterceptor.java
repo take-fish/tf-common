@@ -14,7 +14,8 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * REST 请求统一入口：
  * <ol>
  *   <li>优先校验网关注入的签名身份头；</li>
- *   <li>没有身份头时，可选用 Bearer token 向用户中台 introspection；</li>
+ *   <li>没有身份头时，本地验签 JWT 访问令牌（不访问任何外部服务）；</li>
+ *   <li>令牌不是 JWT 时，可选用 Bearer token 向用户中台 introspection（兼容旧令牌）；</li>
  *   <li>校验 {@link RequirePermission}；</li>
  *   <li>写入 {@link UserContext}，请求结束后清理。</li>
  * </ol>
@@ -22,13 +23,15 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AuthInterceptor implements HandlerInterceptor {
 
     private final IdentitySigner signer;
+    private final JwtVerifier jwtVerifier;
     private final AuthClient authClient;
     private final FishAuthProperties properties;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
-    public AuthInterceptor(IdentitySigner signer, AuthClient authClient,
+    public AuthInterceptor(IdentitySigner signer, JwtVerifier jwtVerifier, AuthClient authClient,
             FishAuthProperties properties) {
         this.signer = signer;
+        this.jwtVerifier = jwtVerifier;
         this.authClient = authClient;
         this.properties = properties;
     }
@@ -68,10 +71,14 @@ public class AuthInterceptor implements HandlerInterceptor {
         if (hasIdentityHeaders(request)) {
             return signer.verify(request);
         }
+        String token = bearerToken(request.getHeader("Authorization"));
+        if (token != null && jwtVerifier != null && properties.getJwt().isEnabled()
+                && jwtVerifier.isConfigured() && JwtVerifier.looksLikeJwt(token)) {
+            return jwtVerifier.verify(token);
+        }
         if (!properties.isAllowBearerFallback()) {
             throw ApiException.unauthorized("请先登录");
         }
-        String token = bearerToken(request.getHeader("Authorization"));
         if (token == null) {
             throw ApiException.unauthorized("请先登录");
         }

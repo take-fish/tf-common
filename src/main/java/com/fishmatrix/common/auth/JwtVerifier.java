@@ -31,22 +31,53 @@ public class JwtVerifier {
             0x30, 0x2a, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x03, 0x21, 0x00
     };
 
-    private final Map<String, PublicKey> keys;
-    private final String defaultKeyId;
-    private final String issuer;
-    private final long clockSkewSeconds;
+    private volatile KeySet current;
+    private final FishAuthProperties properties;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public JwtVerifier(FishAuthProperties properties) {
+        this.properties = properties;
+        this.current = buildKeys();
+    }
+
+    /** 当前生效的公钥集合与配置指纹。 */
+    private record KeySet(Map<String, PublicKey> keys, String keyId, String issuer, String signature) {
+    }
+
+    /**
+     * 每次验签前对配置做一次廉价比对：Nacos 改了公钥（轮换）后无需重启即可生效。
+     * 新配置解析失败时保留上一份可用公钥，避免一个手抖的配置把所有人挡在门外。
+     */
+    private KeySet keys() {
+        KeySet snapshot = current;
+        if (snapshot.signature.equals(signature())) {
+            return snapshot;
+        }
+        try {
+            KeySet rebuilt = buildKeys();
+            current = rebuilt;
+            return rebuilt;
+        } catch (RuntimeException exception) {
+            // 配置写错时保留上一份可用公钥
+            return snapshot;
+        }
+    }
+
+    private String signature() {
         FishAuthProperties.Jwt jwt = properties.getJwt();
-        this.defaultKeyId = jwt.getKeyId() == null || jwt.getKeyId().isBlank()
+        return String.valueOf(jwt.getKeyId()) + '|' + jwt.getIssuer() + '|'
+                + String.valueOf(jwt.getPublicKey()) + '|' + String.valueOf(jwt.getKeys());
+    }
+
+    private KeySet buildKeys() {
+        FishAuthProperties.Jwt jwt = properties.getJwt();
+        String keyId = jwt.getKeyId() == null || jwt.getKeyId().isBlank()
                 ? "default" : jwt.getKeyId().trim();
-        this.issuer = jwt.getIssuer() == null ? "" : jwt.getIssuer().trim();
-        this.clockSkewSeconds = Math.max(0, properties.getClockSkewSeconds());
+        String issuer = jwt.getIssuer() == null ? "" : jwt.getIssuer().trim();
 
         Map<String, PublicKey> parsed = new LinkedHashMap<>();
         if (jwt.getPublicKey() != null && !jwt.getPublicKey().isBlank()) {
-            parsed.put(defaultKeyId, parseKey(defaultKeyId, jwt.getPublicKey()));
+            parsed.put(keyId, parseKey(keyId, jwt.getPublicKey()));
         }
         if (jwt.getKeys() != null) {
             jwt.getKeys().forEach((kid, value) -> {
@@ -55,17 +86,19 @@ public class JwtVerifier {
                 }
             });
         }
-        this.keys = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(parsed));
+        return new KeySet(
+                java.util.Collections.unmodifiableMap(new LinkedHashMap<>(parsed)),
+                keyId, issuer, signature());
     }
 
     /** 是否配置了至少一把公钥。未配置时不应走本地验签。 */
     public boolean isConfigured() {
-        return !keys.isEmpty();
+        return !keys().keys().isEmpty();
     }
 
     /** 已配置的 kid 列表，用于启动自检日志。 */
     public List<String> keyIds() {
-        return List.copyOf(keys.keySet());
+        return List.copyOf(keys().keys().keySet());
     }
 
     /**
@@ -78,6 +111,7 @@ public class JwtVerifier {
         if (!isConfigured()) {
             throw ApiException.unavailable("AUTH_CONFIG_MISSING", "JWT 公钥未配置");
         }
+        KeySet snapshot = keys();
         String[] parts = token.split("\\.", -1);
         if (parts.length != 3) {
             throw invalidToken();
@@ -91,9 +125,9 @@ public class JwtVerifier {
         }
         String kid = header.path("kid").asText("");
         if (kid.isBlank()) {
-            kid = defaultKeyId;
+            kid = snapshot.keyId();
         }
-        PublicKey key = keys.get(kid);
+        PublicKey key = snapshot.keys().get(kid);
         if (key == null) {
             throw invalidToken();
         }
@@ -103,6 +137,7 @@ public class JwtVerifier {
 
         JsonNode claims = readJson(parts[1]);
         long now = Instant.now().getEpochSecond();
+        long clockSkewSeconds = Math.max(0, properties.getClockSkewSeconds());
 
         long exp = claims.path("exp").asLong(0);
         if (exp <= 0) {
@@ -115,7 +150,7 @@ public class JwtVerifier {
         if (nbf > 0 && nbf - clockSkewSeconds > now) {
             throw invalidToken();
         }
-        if (!issuer.isEmpty() && !issuer.equals(claims.path("iss").asText(""))) {
+        if (!snapshot.issuer().isEmpty() && !snapshot.issuer().equals(claims.path("iss").asText(""))) {
             throw invalidToken();
         }
 

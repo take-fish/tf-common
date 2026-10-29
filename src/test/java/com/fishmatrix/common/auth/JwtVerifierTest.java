@@ -162,6 +162,33 @@ class JwtVerifierTest {
         assertFalse(JwtVerifier.looksLikeJwt(null));
     }
 
+    /** Nacos 刷新配置后（新增一把 kid），无需重启即可验新公钥。 */
+    @Test
+    void reloadsKeysWhenConfigChanges() {
+        KeyPair next = JwtTestSupport.ed25519();
+        String newToken = JwtTestSupport.token(next.getPrivate(), "k2", claims());
+
+        assertThrows(ApiException.class, () -> verifier.verify(newToken));
+
+        Map<String, String> keys = new HashMap<>(properties.getJwt().getKeys());
+        keys.put("k2", JwtTestSupport.publicKey(next));
+        properties.getJwt().setKeys(keys);
+
+        assertEquals(7, verifier.verify(newToken).id());
+        assertTrue(verifier.keyIds().containsAll(List.of("k1", "k2")));
+    }
+
+    /** 新配置写坏时保留上一份可用公钥，不能把所有人挡在门外。 */
+    @Test
+    void keepsPreviousKeysWhenNewConfigIsInvalid() {
+        String token = JwtTestSupport.token(pair.getPrivate(), KID, claims());
+
+        properties.getJwt().setPublicKey("not-a-valid-key");
+
+        assertEquals(7, verifier.verify(token).id());
+        assertEquals(List.of("k1"), verifier.keyIds());
+    }
+
     private static Map<String, Object> claims() {
         Map<String, Object> claims = new HashMap<>();
         claims.put("iss", "fishmatrix");

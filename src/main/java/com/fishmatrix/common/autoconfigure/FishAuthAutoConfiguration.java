@@ -3,6 +3,9 @@ package com.fishmatrix.common.autoconfigure;
 import com.fishmatrix.common.auth.AuthClient;
 import com.fishmatrix.common.auth.AuthInterceptor;
 import com.fishmatrix.common.auth.IdentitySigner;
+import com.fishmatrix.common.auth.JwtVerifier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -26,6 +29,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(FishAuthProperties.class)
 public class FishAuthAutoConfiguration {
 
+    private static final Logger log = LoggerFactory.getLogger(FishAuthAutoConfiguration.class);
+
     @Bean
     @ConditionalOnMissingBean
     public IdentitySigner fishIdentitySigner(FishAuthProperties properties) {
@@ -44,11 +49,27 @@ public class FishAuthAutoConfiguration {
                 properties.getCacheMaxEntries());
     }
 
+    /**
+     * 本地验签器：公钥由 Nacos 下发，服务不持有私钥，也不需要调用用户中台。
+     * 未配置公钥时仍会创建实例，由 {@code isConfigured()} 决定是否走本地验签。
+     */
     @Bean
     @ConditionalOnMissingBean
-    public AuthInterceptor fishAuthInterceptor(IdentitySigner signer, AuthClient authClient,
-            FishAuthProperties properties) {
-        return new AuthInterceptor(signer, authClient, properties);
+    public JwtVerifier fishJwtVerifier(FishAuthProperties properties) {
+        JwtVerifier verifier = new JwtVerifier(properties);
+        if (verifier.isConfigured()) {
+            log.info("JWT 本地验签已启用，kid={}", verifier.keyIds());
+        } else {
+            log.warn("JWT 本地验签未配置公钥（fm.auth.jwt.public-key），将回退到 introspection");
+        }
+        return verifier;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public AuthInterceptor fishAuthInterceptor(IdentitySigner signer, JwtVerifier jwtVerifier,
+            AuthClient authClient, FishAuthProperties properties) {
+        return new AuthInterceptor(signer, jwtVerifier, authClient, properties);
     }
 
     @Bean

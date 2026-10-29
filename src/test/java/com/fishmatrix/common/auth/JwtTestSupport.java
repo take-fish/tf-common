@@ -33,6 +33,11 @@ final class JwtTestSupport {
         return b64(raw);
     }
 
+    /** PKCS#8 DER 的 base64，供 JwtIssuer 使用。 */
+    static String privateKey(KeyPair pair) {
+        return b64(pair.getPrivate().getEncoded());
+    }
+
     static String token(PrivateKey key, String kid, Map<String, Object> claims) {
         try {
             String header = b64(MAPPER.writeValueAsBytes(Map.of(

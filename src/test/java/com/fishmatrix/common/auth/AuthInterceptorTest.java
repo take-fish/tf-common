@@ -179,6 +179,29 @@ class AuthInterceptorTest {
         assertNull(UserContext.get());
     }
 
+    /**
+     * 登录/注册/刷新必须匿名放行：刷新时客户端手里的访问令牌恰好已过期，
+     * 拦截器若要求身份，刷新就永远换不出新令牌。
+     */
+    @Test
+    void keepsAuthEntryPointsAnonymous() throws Exception {
+        properties.setAllowBearerFallback(false);
+
+        for (String path : List.of("/api/v1/user/auth/login",
+                "/api/v1/user/auth/register",
+                "/api/v1/user/auth/refresh")) {
+            MockHttpServletRequest request = new MockHttpServletRequest("POST", path);
+            assertTrue(interceptor.preHandle(request, new MockHttpServletResponse(),
+                    handler("open")), path + " 应当匿名放行");
+        }
+
+        MockHttpServletRequest guarded = new MockHttpServletRequest("GET", "/api/v1/user/auth/me");
+        ApiException exception = assertThrows(ApiException.class,
+                () -> interceptor.preHandle(guarded, new MockHttpServletResponse(), handler("open")));
+        assertEquals(HttpStatus.UNAUTHORIZED, exception.status());
+        UserContext.clear();
+    }
+
     private MockHttpServletRequest signedRequest(String... permissions) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/test/items");
         long exp = Instant.now().getEpochSecond() + 60;

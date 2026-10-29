@@ -46,7 +46,11 @@ public class FishAuthProperties {
             "/actuator/**",
             "/error",
             "/api/v1/*/health",
-            "/api/v1/*/meta"));
+            "/api/v1/*/meta",
+            // 登录/注册/刷新令牌天然是匿名的：刷新时手里的 access token 恰好已过期
+            "/api/v1/user/auth/login",
+            "/api/v1/user/auth/register",
+            "/api/v1/user/auth/refresh"));
 
     /** JWT 访问令牌的本地验签配置。密钥由 Nacos 下发，服务不持有私钥。 */
     private Jwt jwt = new Jwt();

@@ -32,6 +32,7 @@ class AuthInterceptorTest {
 
     private FishAuthProperties properties;
     private IdentitySigner signer;
+    private JwtVerifier jwtVerifier;
     private AuthClient authClient;
     private AuthInterceptor interceptor;
 
@@ -40,8 +41,9 @@ class AuthInterceptorTest {
         properties = new FishAuthProperties();
         properties.setIdentitySecret(SECRET);
         signer = new IdentitySigner(SECRET, 30);
+        jwtVerifier = new JwtVerifier(properties);
         authClient = mock(AuthClient.class);
-        interceptor = new AuthInterceptor(signer, authClient, properties);
+        interceptor = new AuthInterceptor(signer, jwtVerifier, authClient, properties);
     }
 
     @AfterEach
@@ -90,6 +92,59 @@ class AuthInterceptorTest {
 
         assertTrue(interceptor.preHandle(request, new MockHttpServletResponse(), handler("upload")));
         assertEquals(USER, UserContext.get());
+    }
+
+    @Test
+    void verifiesJwtLocallyWithoutCallingUserCenter() throws Exception {
+        java.security.KeyPair pair = JwtTestSupport.ed25519();
+        properties.getJwt().setKeyId("k1");
+        properties.getJwt().setPublicKey(JwtTestSupport.publicKey(pair));
+        properties.setAllowBearerFallback(false);
+        AuthInterceptor jwtInterceptor = new AuthInterceptor(signer, new JwtVerifier(properties),
+                authClient, properties);
+
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("iss", "fishmatrix");
+        claims.put("sub", 7);
+        claims.put("usr", "tester");
+        claims.put("nick", "测试员");
+        claims.put("role", "USER");
+        claims.put("roles", java.util.List.of("USER"));
+        claims.put("perms", java.util.List.of("reader.public.upload"));
+        claims.put("exp", Instant.now().getEpochSecond() + 600);
+        String token = JwtTestSupport.token(pair.getPrivate(), "k1", claims);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/test/items");
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+
+        assertTrue(jwtInterceptor.preHandle(request, new MockHttpServletResponse(),
+                handler("upload")));
+        assertEquals(7, UserContext.require().id());
+        verifyNoInteractions(authClient);
+    }
+
+    @Test
+    void rejectsJwtWithBadSignatureEvenWhenFallbackDisabled() throws Exception {
+        java.security.KeyPair pair = JwtTestSupport.ed25519();
+        properties.getJwt().setKeyId("k1");
+        properties.getJwt().setPublicKey(JwtTestSupport.publicKey(pair));
+        properties.setAllowBearerFallback(false);
+        AuthInterceptor jwtInterceptor = new AuthInterceptor(signer, new JwtVerifier(properties),
+                authClient, properties);
+
+        java.util.Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("sub", 7);
+        claims.put("exp", Instant.now().getEpochSecond() + 600);
+        String forged = JwtTestSupport.token(JwtTestSupport.ed25519().getPrivate(), "k1", claims);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/test/items");
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + forged);
+
+        ApiException exception = assertThrows(ApiException.class,
+                () -> jwtInterceptor.preHandle(request, new MockHttpServletResponse(),
+                        handler("upload")));
+        assertEquals("INVALID_TOKEN", exception.code());
+        verifyNoInteractions(authClient);
     }
 
     @Test

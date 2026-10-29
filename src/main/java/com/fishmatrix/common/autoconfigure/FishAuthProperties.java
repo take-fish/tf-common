@@ -68,6 +68,12 @@ public class FishAuthProperties {
         /** 轮换用：kid -> 公钥。可同时配置新旧两把，先发新钥再换签发方。 */
         private Map<String, String> keys = new LinkedHashMap<>();
 
+        /** 签发方私钥（PKCS#8 DER 的 base64）。只有用户中台需要配置，业务服务不持有。 */
+        private String privateKey = "";
+
+        /** 访问令牌有效期。撤销窗口等于这个值。 */
+        private Duration accessTtl = Duration.ofMinutes(60);
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -106,6 +112,22 @@ public class FishAuthProperties {
 
         public void setKeys(Map<String, String> keys) {
             this.keys = keys == null ? new LinkedHashMap<>() : keys;
+        }
+
+        public String getPrivateKey() {
+            return privateKey;
+        }
+
+        public void setPrivateKey(String privateKey) {
+            this.privateKey = privateKey;
+        }
+
+        public Duration getAccessTtl() {
+            return accessTtl;
+        }
+
+        public void setAccessTtl(Duration accessTtl) {
+            this.accessTtl = accessTtl == null ? Duration.ofMinutes(60) : accessTtl;
         }
     }
 
